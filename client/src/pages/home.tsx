@@ -16,6 +16,7 @@ import { ChatInterface } from "@/components/chat-interface";
 import { AspectChart } from "@/components/aspect-chart";
 import { ElevationChart } from "@/components/elevation-chart";
 import { ProgressTracker } from "@/components/progress-tracker";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface ProgressState {
   stage: string;
@@ -167,6 +168,7 @@ export default function Home() {
               <p className="text-sm text-muted-foreground">Aggregate and analyze avalanche field observations</p>
             </div>
           </div>
+          <ThemeToggle />
         </div>
 
         {/* Control Panel */}

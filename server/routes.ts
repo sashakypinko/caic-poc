@@ -72,23 +72,34 @@ async function fetchCAICReports(date: string): Promise<FieldReport[]> {
 }
 
 // Map elevation strings to standard bands
-// CAIC uses: >TL (above treeline), TL (at treeline/near), <TL (below treeline)
+// CAIC uses HTML entities: &#62;TL (>TL above treeline), TL (at treeline), &#60;TL (<TL below treeline)
 function mapElevation(elevation: string | null | undefined): "aboveTreeline" | "nearTreeline" | "belowTreeline" | null {
   if (!elevation) return null;
-  const trimmed = elevation.trim();
-  const upper = trimmed.toUpperCase();
   
-  // Check for explicit > or < prefixes first (CAIC notation)
-  if (upper.startsWith(">") || upper.includes(">TL") || upper.includes("ATL") || upper.includes("ABOVE") || upper.includes("ALPINE")) {
+  // Decode HTML entities first: &#62; -> >, &#60; -> <
+  let decoded = elevation
+    .replace(/&#62;/g, ">")
+    .replace(/&#60;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .trim()
+    .toUpperCase();
+  
+  // Check for above treeline: >TL, ATL, ABOVE
+  if (decoded.includes(">TL") || decoded.startsWith(">") || decoded.includes("ATL") || decoded.includes("ABOVE") || decoded.includes("ALPINE")) {
     return "aboveTreeline";
   }
-  if (upper.startsWith("<") || upper.includes("<TL") || upper.includes("BTL") || upper.includes("BELOW") || upper.includes("SUB")) {
+  
+  // Check for below treeline: <TL, BTL, BELOW
+  if (decoded.includes("<TL") || decoded.startsWith("<") || decoded.includes("BTL") || decoded.includes("BELOW") || decoded.includes("SUB")) {
     return "belowTreeline";
   }
-  // Plain TL or NTL = near treeline
-  if (upper === "TL" || upper.includes("NTL") || upper.includes("NEAR") || upper.includes("TREELINE")) {
+  
+  // Plain TL or NTL = near treeline (at treeline)
+  if (decoded === "TL" || decoded.includes("NTL") || decoded.includes("NEAR") || decoded.includes("TREELINE")) {
     return "nearTreeline";
   }
+  
   return null;
 }
 
