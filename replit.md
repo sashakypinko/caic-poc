@@ -6,6 +6,13 @@ This is a proof-of-concept web application for Colorado Avalanche Information Ce
 
 ## Recent Changes
 
+- **2026-01-12**: Bug fixes and performance improvements
+  - Fixed mapElevation() to properly handle CAIC notation (>TL, TL, <TL for above/at/below treeline)
+  - Fixed mapAspect() to prioritize two-letter directions (NW, NE, SW, SE) before single-letter to prevent prefix collisions
+  - Added xAI response caching with SHA-256 payload hashing and 24-hour TTL
+  - Implemented Server-Sent Events (SSE) for real-time progress tracking during data fetching and synthesis
+  - Added visual progress tracker component with stage indicators
+
 - **2026-01-12**: Initial MVP implementation complete
   - Frontend: Date picker, metrics dashboard, charts (aspect/elevation), instability tables, AI summaries, chat interface
   - Backend: CAIC API integration, data aggregation, xAI Grok-3 integration for summaries and chat
