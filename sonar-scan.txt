@@ -1,0 +1,7 @@
+sonar \
+  -Dsonar.token=0d5d0e80dd276d0b6db27300246fb18a2a861de3 \
+  -Dsonar.projectKey=tetheree-gitlab_caic-field-report-aggregator \
+  -Dsonar.organization=tetheree-gitlab \
+  -Dsonar.source=server \
+  -Dsonar.inclusions=server/**/*,shared/**/*,package.json,coverage/lcov.info \
+  -Dsonar.exclusions=server/vite.ts

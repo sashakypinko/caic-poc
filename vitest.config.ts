@@ -5,13 +5,18 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['server/**/*.test.ts'],
+    include: ['server/**/*.test.ts', 'shared/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
       reportsDirectory: 'coverage',
-      include: ['server/lib/**/*.ts'],
-      exclude: ['server/**/*.test.ts', 'server/lib/*.test.ts'],
+      include: [
+        'server/lib/**/*.ts',
+        'shared/**/*.ts',
+      ],
+      exclude: [
+        '**/*.test.ts',
+      ],
     },
   },
   resolve: {
