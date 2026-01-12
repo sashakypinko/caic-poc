@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "node:http";
 
 const app = express();
+app.disable("x-powered-by");
 const httpServer = createServer(app);
 
 declare module "http" {

@@ -1,0 +1,93 @@
+5 of 5 issues
+Group by none 
+Sort by highest severity 
+H
+Cross-site Scripting (XSS)
+Snyk Code
+CWE-79Open this link in a new tab
+Score
+820
+4849505152
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid()}"`,
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+Unsanitized input from the request URL flows into end, where it is used to render an HTML page returned to the user. This may result in a Cross-Site Scripting attack (XSS).
+
+‎server/vite.tsOpen this link in a new tab
+10 steps in 1 file
+Learn about this type of vulnerability and how to fix itOpen this link in a new tab
+ Ignore across repository 
+View details
+M
+Information Exposure - X-Powered-By Header
+Snyk Code
+CWE-200Open this link in a new tab
+Score
+570
+23456
+import { registerRoutes } from "./routes";
+import { serveStatic } from "./static";
+import { createServer } from "http";
+
+const app = express();
+Disable X-Powered-By header for your Express app (consider using Helmet middleware), because it exposes information about the used framework to potential attackers.
+
+‎server/index.tsOpen this link in a new tab
+1 step in 1 file
+Learn about this type of vulnerability and how to fix itOpen this link in a new tab
+ Ignore across repository 
+View details
+M
+Cleartext Transmission - HTTP Instead of HTTPS
+Snyk Code
+CWE-319Open this link in a new tab
+Score
+570
+34567
+import { serveStatic } from "./static";
+import { createServer } from "http";
+
+const app = express();
+const httpServer = createServer(app);
+http.createServer uses HTTP which is an insecure protocol and should not be used in code due to cleartext transmission of information. Data in cleartext in a communication channel can be sniffed by unauthorized actors. Consider using the https module instead.
+
+‎server/index.tsOpen this link in a new tab
+1 step in 1 file
+ Ignore across repository 
+View details
+M
+Allocation of Resources Without Limits or Throttling
+Snyk Code
+CWE-770Open this link in a new tab
+Score
+570
+3031323334
+  });
+
+  app.use(vite.middlewares);
+
+  app.use("*", async (req, res, next) => {
+Expensive operation (a file system operation) is performed by an endpoint handler which does not use a rate-limiting mechanism. It may enable the attackers to perform Denial-of-service attacks. Consider using a rate-limiting middleware such as express-limit.
+
+‎server/vite.tsOpen this link in a new tab
+2 steps in 1 file
+Learn about this type of vulnerability and how to fix itOpen this link in a new tab
+ Ignore across repository 
+View details
+L
+Sensitive Cookie in HTTPS Session Without 'Secure' Attribute
+Snyk Code
+CWE-614Open this link in a new tab
+Score
+370
+8283848586
+        _setOpen(openState)
+      }
+
+      // This sets the cookie to keep the sidebar state.
+      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+Cookie misses the Secure attribute (it is false by default). Set it to true to protect the cookie from man-in-the-middle attacks.
+
+‎client/src/components/ui/sidebar.tsx
