@@ -1,0 +1,74 @@
+As a senior web developer, generate a complete Proof of Concept (POC) web application using React / Node. The application must fetch data from the CAIC API, process and aggregate it, use an LLM (specifically, the xAI Grok API) for synthesizing natural language summaries, and provide a chat interface powered by the same LLM. Ensure the app runs entirely in Replit, handles API requests securely, and includes all necessary dependencies installable via Replit's package manager (e.g., requests, datetime, json, and any xAI Grok API client library if available—assume you'll need to handle API keys via Replit secrets).
+Core Functionality
+
+User Story: As a CAIC forecaster or avalanche professional, I want a Replit-based proof-of-concept application that fetches all daily field reports for a selected date from the CAIC API, aggregates key numerical data related to avalanches and signs of instability, synthesizes natural language summaries from specified text fields, and displays the results in a structured UI, so that I can quickly obtain an aggregated summary of statewide field observations to support daily forecasting and analysis.
+
+Acceptance Criteria
+
+Include a date picker UI element that allows selection of a specific date, with the default set to the current date.
+Upon selecting a date and submitting (via a form POST), fetch all field reports submitted for that date using the CAIC API. The API endpoint is: https://api.avalanche.state.co.us/api/v2/observation_reports with query parameters like ?r[observed_at_gteq]=YYYY-MM-DDT00:00:01.000Z&r[observed_at_lteq]=YYYY-MM-DDT23:59:59.000Z (format the date accordingly in UTC).
+Compute and display the total number of field reports for the selected date.
+Compute and display the number of reports that contain at least one observed avalanche (based on child avalanche_observations data).
+Compute and display the total number of individual avalanches observed across all reports (sum of avalanche_observations_count or length of avalanche_observations arrays).
+Aggregate avalanches by elevation band using standard CAIC terminology (Above Treeline as "ATL" or "TL", Near Treeline as "NTL", Below Treeline as "BTL") and display the count of avalanches in each band (parse from the "elevation" field in avalanche_observations, e.g., "TL" for Treeline).
+Aggregate avalanches by aspect using the eight primary directions (N, NE, E, SE, S, SW, W, NW) and display the count for each (parse from the "aspect" field in avalanche_observations).
+Identify and aggregate signs of instability (cracking and collapsing) by counting reports for each dropdown value (e.g., None, Minor, Moderate, etc., for cracking and separately for collapsing). Parse from snowpack_observations fields like "cracking" and "collapsing" (handle null or missing values as "None").
+Use the xAI Grok API as the LLM to synthesize a natural language summary identifying common themes from the "description" or "observation_summary" fields (use "description" if "observation_summary" isn't present) across all reports and display this summary.
+Use the same xAI Grok API to synthesize separate natural language summaries identifying common themes from the "Snowpack" fields (parse from snowpack_detail.description or snowpack_observations.comments) and "Weather" fields (parse from weather_detail.description or weather_observations) across all reports and display these summaries.
+Provide a chat interface (e.g., a simple text input and response display area, using Flask for backend handling) confined to the aggregated data for the selected date, powered by the xAI Grok API, that accurately answers factual questions about the numerical aggregations and synthesized summaries (e.g., "What was the total number of avalanches?" or "What common themes were in the snowpack summaries?"). Pass the aggregated data as context to the LLM prompt for accurate responses.
+Present numerical aggregations in a clear, structured UI (e.g., use HTML tables for counts, simple lists, or basic charts via JavaScript libraries like Chart.js if installable in Replit).
+Present synthesized natural language summaries in readable text sections within the UI (e.g., paragraphs with headings like "Observation Summary Themes", "Snowpack Summary", "Weather Summary").
+Handle cases with no reports for the selected date by displaying an appropriate message (e.g., "No reports available for this date").
+Use in-memory data processing and storage for the POC (no database needed).
+Ensure successful fetching, aggregation, synthesis, and display for a date with available reports (test with the sample date 2026-01-08).
+
+Business Goal
+Create a POC using Replit for CAIC which reads data from many daily reports using the CAIC API and aggregates data and synthesizes data into a summary report of a given day.
+Data Details
+
+Daily reports include parent-level field data and child-level data for avalanche observations (avalanche_observations array) and media (assets).
+Current daily reports are viewable at: https://avalanche.state.co.us/observations/view-field-reports
+API: https://api.avalanche.state.co.us/api/v2/observation_reports (with date range params as shown).
+Sample API Response Structure (use this to guide parsing):
+Array of report objects, each with:
+id, type, backcountry_zone, observed_at, etc.
+avalanche_observations_count and avalanche_observations array (each with aspect, elevation, type_code, etc.).
+snowpack_observations array (with cracking, collapsing, etc.).
+weather_observations array.
+description (for observation summary).
+snowpack_detail.description.
+weather_detail.description.
+
+Example provided in the query (one report with 2 avalanches, aspects NE and N, elevation TL, etc.).
+
+
+Initial Requirements for Aggregation and Synthesis
+
+Aggregated Data (numerical values):
+Number of total reports: len(reports)
+Number of reports with child avalanche data: count reports where avalanche_observations_count > 0
+Total number of reports with cracking: count snowpack_observations where cracking is not None/Minor/Moderate/etc. (aggregate by level)
+Total number of reports with collapsing: similar to cracking
+Total number of avalanches: sum of lengths of avalanche_observations across reports
+Total number of avalanches by elevation: dict with keys 'Above Treeline', 'Near Treeline', 'Below Treeline' (map 'TL' to Treeline, etc.)
+Total number of avalanches by aspect: dict with keys N, NE, E, SE, S, SW, W, NW
+
+Synthesized Data (natural language):
+Use xAI Grok API to summarize common themes from:
+Observation summaries: Collect all report["description"] or equivalent, prompt Grok: "Synthesize common themes from these observation summaries: [list them]"
+Snowpack: Collect snowpack_detail.description or snowpack_observations.comments
+Weather: Collect weather_detail.description or weather_observations
+
+
+Chat Feature:
+Simple form for user questions.
+Prompt Grok API with context like: "Based on this aggregated data [insert JSON of aggregations and summaries], answer: [user question]"
+
+
+Implementation Guidelines
+
+Use Node for backend logic (fetch API with requests, parse JSON, aggregate with dicts/counters).
+For LLM: Integrate xAI Grok API (assume API key is stored in Replit secrets; provide placeholder code for API calls, e.g., via requests.post to Grok endpoint with prompt and context).
+UI: Reacrt with form for date picker, submit button, sections for aggregates (tables), summaries (text), and chat (input + output div).
+Handle errors: API failures, invalid dates, no data.
+Make the code modular: Functions for fetching, aggregating, synthesizing.
