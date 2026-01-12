@@ -12,6 +12,7 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: [
         'server/lib/**/*.ts',
+        'server/routes.ts',
         'shared/**/*.ts',
       ],
       exclude: [

@@ -4,4 +4,4 @@ sonar \
   -Dsonar.organization=tetheree-gitlab \
   -Dsonar.source=server \
   -Dsonar.inclusions=server/**/*,shared/**/*,package.json,coverage/lcov.info \
-  -Dsonar.exclusions=server/vite.ts
+  -Dsonar.exclusions=server/vite.ts,**/*.test.*
