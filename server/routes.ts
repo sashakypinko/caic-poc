@@ -2,7 +2,6 @@ import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import OpenAI from "openai";
 import { z } from "zod";
-import { createHash } from "crypto";
 import { 
   fetchReportsRequestSchema,
   chatRequestSchema,
@@ -11,40 +10,12 @@ import {
   type FieldReport, 
   type ReportResponse,
 } from "@shared/schema";
+import { xaiCache } from "./lib/cache";
 
 const openai = new OpenAI({ 
   baseURL: "https://api.x.ai/v1", 
   apiKey: process.env.XAI_API_KEY 
 });
-
-// In-memory cache for xAI responses
-const xaiCache = new Map<string, { response: string; timestamp: number }>();
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function hashPayload(payload: object): string {
-  const json = JSON.stringify(payload);
-  return createHash("sha256").update(json).digest("hex");
-}
-
-function getCachedResponse(hash: string): string | null {
-  const cached = xaiCache.get(hash);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    console.log(`[Cache] HIT for hash ${hash.substring(0, 8)}...`);
-    return cached.response;
-  }
-  if (cached) {
-    console.log(`[Cache] EXPIRED for hash ${hash.substring(0, 8)}...`);
-    xaiCache.delete(hash);
-  } else {
-    console.log(`[Cache] MISS for hash ${hash.substring(0, 8)}...`);
-  }
-  return null;
-}
-
-function setCachedResponse(hash: string, response: string): void {
-  console.log(`[Cache] STORE hash ${hash.substring(0, 8)}... (${response.length} chars)`);
-  xaiCache.set(hash, { response, timestamp: Date.now() });
-}
 
 // Progress tracking for SSE
 type ProgressClient = {
@@ -290,10 +261,10 @@ async function synthesizeSummary(texts: string[], category: string): Promise<{ s
     category,
     texts: combinedText,
   };
-  const cacheKey = hashPayload(payload);
+  const cacheKey = xaiCache.hashPayload(payload);
   
   // Check cache first
-  const cached = getCachedResponse(cacheKey);
+  const cached = xaiCache.get(cacheKey);
   if (cached) {
     console.log(`[xAI] Using cached ${category} summary`);
     return { summary: cached, cached: true };
@@ -324,7 +295,7 @@ async function synthesizeSummary(texts: string[], category: string): Promise<{ s
     console.log(`[xAI] ${category} summary generated in ${elapsed}ms (${summary.length} chars)`);
     
     // Cache the response
-    setCachedResponse(cacheKey, summary);
+    xaiCache.set(cacheKey, summary);
     
     return { summary, cached: false };
   } catch (error) {
