@@ -1,47 +1,122 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Calendar, Mountain, AlertTriangle, Snowflake, Cloud, MessageSquare, Loader2, FileText, TrendingUp, Compass } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { ReportResponse, AggregatedData, SynthesizedSummaries, ChatMessage } from "@shared/schema";
+import type { ReportResponse, ChatMessage } from "@shared/schema";
 import { MetricCard } from "@/components/metric-card";
 import { DataTable } from "@/components/data-table";
 import { SummaryCard } from "@/components/summary-card";
 import { ChatInterface } from "@/components/chat-interface";
 import { AspectChart } from "@/components/aspect-chart";
 import { ElevationChart } from "@/components/elevation-chart";
+import { ProgressTracker } from "@/components/progress-tracker";
+
+interface ProgressState {
+  stage: string;
+  progress: number;
+  message: string;
+}
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [reportData, setReportData] = useState<ReportResponse | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState<ProgressState>({ stage: "", progress: 0, message: "" });
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const sessionIdRef = useRef<string>(crypto.randomUUID());
 
-  const fetchReportsMutation = useMutation({
-    mutationFn: async (date: string) => {
-      const response = await apiRequest("POST", "/api/reports", { date });
-      return response.json() as Promise<ReportResponse>;
-    },
-    onSuccess: (data) => {
+  // Clean up SSE on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  const connectSSE = useCallback(() => {
+    // Generate new session ID for this request
+    sessionIdRef.current = crypto.randomUUID();
+    
+    // Close existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    
+    // Connect to SSE endpoint
+    const eventSource = new EventSource(`/api/progress/${sessionIdRef.current}`);
+    eventSourceRef.current = eventSource;
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setProgress(data);
+      } catch (e) {
+        console.error("Failed to parse progress event:", e);
+      }
+    };
+    
+    eventSource.onerror = () => {
+      eventSource.close();
+    };
+    
+    return sessionIdRef.current;
+  }, []);
+
+  const fetchReports = async (date: string) => {
+    setIsLoading(true);
+    setProgress({ stage: "connecting", progress: 0, message: "Connecting..." });
+    
+    const sessionId = connectSSE();
+    
+    try {
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Session-Id": sessionId,
+        },
+        body: JSON.stringify({ date }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.status}`);
+      }
+      
+      const data = await response.json() as ReportResponse;
       setReportData(data);
       setChatMessages([]);
-    },
-  });
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      setProgress({ stage: "error", progress: 0, message: "Failed to fetch reports" });
+    } finally {
+      setIsLoading(false);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    }
+  };
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      const response = await apiRequest("POST", "/api/chat", {
-        message,
-        context: reportData?.aggregatedData,
-        summaries: reportData?.summaries,
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          context: reportData?.aggregatedData,
+          summaries: reportData?.summaries,
+        }),
       });
+      if (!response.ok) throw new Error("Chat request failed");
       return response.json() as Promise<{ response: string }>;
     },
     onSuccess: (data, message) => {
@@ -63,7 +138,7 @@ export default function Home() {
 
   const handleSubmit = () => {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
-    fetchReportsMutation.mutate(dateStr);
+    fetchReports(dateStr);
   };
 
   const handleDateSelect = (date: Date | undefined) => {
@@ -128,10 +203,10 @@ export default function Home() {
               </Popover>
               <Button 
                 onClick={handleSubmit} 
-                disabled={fetchReportsMutation.isPending}
+                disabled={isLoading}
                 data-testid="button-fetch-reports"
               >
-                {fetchReportsMutation.isPending ? (
+                {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Fetching...
@@ -152,22 +227,21 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {/* Loading State */}
-        {fetchReportsMutation.isPending && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <Card key={i}>
-                <CardContent className="p-6">
-                  <Skeleton className="h-8 w-24 mb-2" />
-                  <Skeleton className="h-4 w-32" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        {/* Loading State with Progress */}
+        {isLoading && (
+          <Card>
+            <CardContent className="p-6">
+              <ProgressTracker
+                progress={progress.progress}
+                stage={progress.stage}
+                message={progress.message}
+              />
+            </CardContent>
+          </Card>
         )}
 
         {/* Error State */}
-        {fetchReportsMutation.isError && (
+        {progress.stage === "error" && !isLoading && (
           <Card className="border-destructive/50">
             <CardContent className="p-6">
               <div className="flex items-center gap-3 text-destructive">
@@ -326,7 +400,7 @@ export default function Home() {
         )}
 
         {/* Initial State - Show prompt to fetch */}
-        {!reportData && !fetchReportsMutation.isPending && !fetchReportsMutation.isError && (
+        {!reportData && !isLoading && progress.stage !== "error" && (
           <Card>
             <CardContent className="p-12 text-center">
               <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">

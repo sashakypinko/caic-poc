@@ -1,7 +1,8 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import OpenAI from "openai";
 import { z } from "zod";
+import { createHash } from "crypto";
 import { 
   fetchReportsRequestSchema,
   chatRequestSchema,
@@ -15,6 +16,44 @@ const openai = new OpenAI({
   baseURL: "https://api.x.ai/v1", 
   apiKey: process.env.XAI_API_KEY 
 });
+
+// In-memory cache for xAI responses
+const xaiCache = new Map<string, { response: string; timestamp: number }>();
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function hashPayload(payload: object): string {
+  const json = JSON.stringify(payload);
+  return createHash("sha256").update(json).digest("hex");
+}
+
+function getCachedResponse(hash: string): string | null {
+  const cached = xaiCache.get(hash);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.response;
+  }
+  if (cached) {
+    xaiCache.delete(hash); // Expired
+  }
+  return null;
+}
+
+function setCachedResponse(hash: string, response: string): void {
+  xaiCache.set(hash, { response, timestamp: Date.now() });
+}
+
+// Progress tracking for SSE
+type ProgressClient = {
+  res: Response;
+  sessionId: string;
+};
+const progressClients = new Map<string, ProgressClient>();
+
+function sendProgress(sessionId: string, stage: string, progress: number, message: string): void {
+  const client = progressClients.get(sessionId);
+  if (client) {
+    client.res.write(`data: ${JSON.stringify({ stage, progress, message })}\n\n`);
+  }
+}
 
 // Fetch reports from CAIC API
 async function fetchCAICReports(date: string): Promise<FieldReport[]> {
@@ -33,33 +72,51 @@ async function fetchCAICReports(date: string): Promise<FieldReport[]> {
 }
 
 // Map elevation strings to standard bands
+// CAIC uses: >TL (above treeline), TL (at treeline/near), <TL (below treeline)
 function mapElevation(elevation: string | null | undefined): "aboveTreeline" | "nearTreeline" | "belowTreeline" | null {
   if (!elevation) return null;
-  const upper = elevation.toUpperCase();
-  if (upper.includes("ATL") || upper === "TL" || upper.includes("ABOVE") || upper.includes("ALPINE")) {
+  const trimmed = elevation.trim();
+  const upper = trimmed.toUpperCase();
+  
+  // Check for explicit > or < prefixes first (CAIC notation)
+  if (upper.startsWith(">") || upper.includes(">TL") || upper.includes("ATL") || upper.includes("ABOVE") || upper.includes("ALPINE")) {
     return "aboveTreeline";
   }
-  if (upper.includes("NTL") || upper.includes("NEAR") || upper.includes("TREELINE")) {
-    return "nearTreeline";
-  }
-  if (upper.includes("BTL") || upper.includes("BELOW") || upper.includes("SUB")) {
+  if (upper.startsWith("<") || upper.includes("<TL") || upper.includes("BTL") || upper.includes("BELOW") || upper.includes("SUB")) {
     return "belowTreeline";
   }
-  // Default treeline mapping for common codes
-  if (upper === "TL") return "nearTreeline";
+  // Plain TL or NTL = near treeline
+  if (upper === "TL" || upper.includes("NTL") || upper.includes("NEAR") || upper.includes("TREELINE")) {
+    return "nearTreeline";
+  }
   return null;
 }
 
 // Map aspect strings to standard compass directions
+// Check longest aspects first to prevent prefix collisions (NW before N, etc.)
 function mapAspect(aspect: string | null | undefined): keyof AggregatedData["avalanchesByAspect"] | null {
   if (!aspect) return null;
   const upper = aspect.toUpperCase().trim();
-  const aspects = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
-  for (const a of aspects) {
-    if (upper === a || upper.startsWith(a + " ") || upper.includes(a)) {
+  
+  // Use word boundary regex to match exact compass directions
+  // Check two-letter aspects first to avoid N matching NW, etc.
+  const twoLetterAspects = ["NE", "NW", "SE", "SW"] as const;
+  for (const a of twoLetterAspects) {
+    const regex = new RegExp(`\\b${a}\\b`);
+    if (upper === a || regex.test(upper)) {
       return a;
     }
   }
+  
+  // Then check single-letter aspects
+  const singleLetterAspects = ["N", "E", "S", "W"] as const;
+  for (const a of singleLetterAspects) {
+    const regex = new RegExp(`\\b${a}\\b`);
+    if (upper === a || regex.test(upper)) {
+      return a;
+    }
+  }
+  
   return null;
 }
 
@@ -180,13 +237,27 @@ function collectTexts(reports: FieldReport[]): {
   return { observations, snowpack, weather };
 }
 
-// Synthesize summary using xAI Grok
-async function synthesizeSummary(texts: string[], category: string): Promise<string> {
+// Synthesize summary using xAI Grok with caching
+async function synthesizeSummary(texts: string[], category: string): Promise<{ summary: string; cached: boolean }> {
   if (texts.length === 0) {
-    return `No ${category.toLowerCase()} data available for this date.`;
+    return { summary: `No ${category.toLowerCase()} data available for this date.`, cached: false };
   }
 
   const combinedText = texts.slice(0, 50).join("\n---\n"); // Limit to prevent token overflow
+  
+  // Create cache key from payload
+  const payload = {
+    type: "synthesize",
+    category,
+    texts: combinedText,
+  };
+  const cacheKey = hashPayload(payload);
+  
+  // Check cache first
+  const cached = getCachedResponse(cacheKey);
+  if (cached) {
+    return { summary: cached, cached: true };
+  }
   
   try {
     const response = await openai.chat.completions.create({
@@ -204,10 +275,15 @@ async function synthesizeSummary(texts: string[], category: string): Promise<str
       max_tokens: 500,
     });
 
-    return response.choices[0].message.content || `Unable to synthesize ${category.toLowerCase()} summary.`;
+    const summary = response.choices[0].message.content || `Unable to synthesize ${category.toLowerCase()} summary.`;
+    
+    // Cache the response
+    setCachedResponse(cacheKey, summary);
+    
+    return { summary, cached: false };
   } catch (error) {
     console.error(`Error synthesizing ${category}:`, error);
-    return `Error generating ${category.toLowerCase()} summary. Please try again.`;
+    return { summary: `Error generating ${category.toLowerCase()} summary. Please try again.`, cached: false };
   }
 }
 
@@ -250,7 +326,29 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Fetch and aggregate reports for a date
+  // SSE endpoint for progress tracking
+  app.get("/api/progress/:sessionId", (req, res) => {
+    const { sessionId } = req.params;
+    
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    
+    // Send initial connection message
+    res.write(`data: ${JSON.stringify({ stage: "connected", progress: 0, message: "Connected" })}\n\n`);
+    
+    // Store the client
+    progressClients.set(sessionId, { res, sessionId });
+    
+    // Clean up on close
+    req.on("close", () => {
+      progressClients.delete(sessionId);
+    });
+  });
+  
+  // Fetch and aggregate reports for a date with progress tracking
   app.post("/api/reports", async (req, res) => {
     try {
       // Validate request body with Zod schema
@@ -263,6 +361,7 @@ export async function registerRoutes(
       }
       
       const { date } = parseResult.data;
+      const sessionId = req.headers["x-session-id"] as string | undefined;
 
       // Additional date format validation
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -270,29 +369,42 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" });
       }
 
-      // Fetch reports from CAIC API
+      // Stage 1: Fetch reports from CAIC API
+      if (sessionId) sendProgress(sessionId, "fetching", 10, "Fetching field reports from CAIC...");
       const reports = await fetchCAICReports(date);
+      if (sessionId) sendProgress(sessionId, "fetching", 25, `Retrieved ${reports.length} reports`);
       
-      // Aggregate data
+      // Stage 2: Aggregate data
+      if (sessionId) sendProgress(sessionId, "aggregating", 30, "Aggregating report data...");
       const aggregatedData = aggregateReports(reports);
+      if (sessionId) sendProgress(sessionId, "aggregating", 40, "Data aggregation complete");
       
-      // Collect texts for synthesis
+      // Stage 3: Collect texts for synthesis
       const texts = collectTexts(reports);
       
-      // Synthesize summaries in parallel
-      const [observationSummary, snowpackSummary, weatherSummary] = await Promise.all([
-        synthesizeSummary(texts.observations, "Observation"),
-        synthesizeSummary(texts.snowpack, "Snowpack"),
-        synthesizeSummary(texts.weather, "Weather"),
-      ]);
+      // Stage 4: Synthesize summaries
+      if (sessionId) sendProgress(sessionId, "synthesizing", 45, "Generating observation summary...");
+      const obsResult = await synthesizeSummary(texts.observations, "Observation");
+      if (sessionId) sendProgress(sessionId, "synthesizing", 60, obsResult.cached ? "Observation summary loaded from cache" : "Observation summary generated");
+      
+      if (sessionId) sendProgress(sessionId, "synthesizing", 65, "Generating snowpack summary...");
+      const snowResult = await synthesizeSummary(texts.snowpack, "Snowpack");
+      if (sessionId) sendProgress(sessionId, "synthesizing", 80, snowResult.cached ? "Snowpack summary loaded from cache" : "Snowpack summary generated");
+      
+      if (sessionId) sendProgress(sessionId, "synthesizing", 85, "Generating weather summary...");
+      const weatherResult = await synthesizeSummary(texts.weather, "Weather");
+      if (sessionId) sendProgress(sessionId, "synthesizing", 95, weatherResult.cached ? "Weather summary loaded from cache" : "Weather summary generated");
+      
+      // Stage 5: Complete
+      if (sessionId) sendProgress(sessionId, "complete", 100, "Report aggregation complete");
 
       const response: ReportResponse = {
         date,
         aggregatedData,
         summaries: {
-          observationSummary,
-          snowpackSummary,
-          weatherSummary,
+          observationSummary: obsResult.summary,
+          snowpackSummary: snowResult.summary,
+          weatherSummary: weatherResult.summary,
         },
       };
 
