@@ -17,10 +17,14 @@ export function ChatInterface({ messages, onSendMessage, isLoading, disabled }: 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevMessagesLengthRef = useRef(messages.length);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+    if (messages.length > prevMessagesLengthRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages.length]);
 
   useEffect(() => {
     if (textareaRef.current) {
