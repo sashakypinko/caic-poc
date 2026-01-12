@@ -1,0 +1,73 @@
+H
+express@4.22.1
+1 transitive issue
+Priority Score (MAX)
+614
+Fixable issues 0
+Issues with no supported fix 1
+Vulnerable dependencies ...
+H
+Allocation of Resources Without Limits or Throttling
+↳ qs@6.13.0
+CWE-770Open this link in a new tab
+CVSS 8.7Open this link in a new tab
+614
+Vulnerability
+CWE-770Open this link in a new tab
+CVE-2025-15284Open this link in a new tab
+CVSS 8.7Open this link in a new tab high
+SNYK-JS-QS-14724253Open this link in a new tab
+Introduced through
+express@4.22.1
+Fixed in
+qs@6.14.1
+Exploit maturity
+Proof of Concept
+Show less detail 
+Detailed paths
+Introduced through: caic-field-report-aggregator@1.0.0 › express@4.22.1 › body-parser@1.20.3 › qs@6.13.0
+Fix: Your dependencies are out of date, otherwise you would be using a newer qs than qs@6.13.0. Try relocking your lockfile or deleting node_modules. If the problem persists, one of your dependencies may be bundling outdated modules. 
+Security information
+Factors contributing to the scoring:
+Snyk: CVSS v4.0 8.7 - High Severity | CVSS v3.1 7.5 - High Severity
+NVD: Not available. NVD has not yet published its analysis.
+Why are the scores different? Learn how Snyk evaluates vulnerability scores
+Overview
+qs is a querystring parser that supports nesting and arrays, with a depth limit.
+
+Affected versions of this package are vulnerable to Allocation of Resources Without Limits or Throttling via improper enforcement of the arrayLimit option in bracket notation parsing. An attacker can exhaust server memory and cause application unavailability by submitting a large number of bracket notation parameters - like a[]=1&a[]=2 - in a single HTTP request.
+
+L
+Information Exposure - X-Powered-By Header
+Snyk Code
+CWE-200Open this link in a new tab
+Score
+420
+4243444546
+    vi.resetAllMocks();
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    
+    app = express();
+Disable X-Powered-By header for your Express app (consider using Helmet middleware), because it exposes information about the used framework to potential attackers.
+
+‎server/routes.test.tsOpen this link in a new tab
+1 step in 1 file
+Learn about this type of vulnerability and how to fix itOpen this link in a new tab
+ Ignore across repository 
+View details
+L
+Cleartext Transmission - HTTP Instead of HTTPS
+Snyk Code
+CWE-319Open this link in a new tab
+Score
+420
+4445464748
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    
+    app = express();
+    app.use(express.json());
+    httpServer = createServer(app);
+http.createServer uses HTTP which is an insecure protocol and should not be used in code due to cleartext transmission of information. Data in cleartext in a communication channel can be sniffed by unauthorized actors. Consider using the https module instead.
+
+‎server/routes.test.ts

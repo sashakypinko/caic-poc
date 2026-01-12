@@ -44,6 +44,7 @@ describe('registerRoutes', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     
     app = express();
+    app.disable('x-powered-by');
     app.use(express.json());
     httpServer = createServer(app);
     await registerRoutes(httpServer, app);
