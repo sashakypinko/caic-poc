@@ -29,15 +29,20 @@ function hashPayload(payload: object): string {
 function getCachedResponse(hash: string): string | null {
   const cached = xaiCache.get(hash);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    console.log(`[Cache] HIT for hash ${hash.substring(0, 8)}...`);
     return cached.response;
   }
   if (cached) {
-    xaiCache.delete(hash); // Expired
+    console.log(`[Cache] EXPIRED for hash ${hash.substring(0, 8)}...`);
+    xaiCache.delete(hash);
+  } else {
+    console.log(`[Cache] MISS for hash ${hash.substring(0, 8)}...`);
   }
   return null;
 }
 
 function setCachedResponse(hash: string, response: string): void {
+  console.log(`[Cache] STORE hash ${hash.substring(0, 8)}... (${response.length} chars)`);
   xaiCache.set(hash, { response, timestamp: Date.now() });
 }
 
@@ -62,12 +67,20 @@ async function fetchCAICReports(date: string): Promise<FieldReport[]> {
   
   const url = `https://api.avalanche.state.co.us/api/v2/observation_reports?r[observed_at_gteq]=${encodeURIComponent(startDate)}&r[observed_at_lteq]=${encodeURIComponent(endDate)}`;
   
+  console.log(`[CAIC] Fetching reports for ${date}`);
+  console.log(`[CAIC] API URL: ${url}`);
+  
+  const startTime = Date.now();
   const response = await fetch(url);
+  const elapsed = Date.now() - startTime;
+  
   if (!response.ok) {
+    console.error(`[CAIC] API error: ${response.status} ${response.statusText}`);
     throw new Error(`CAIC API error: ${response.status}`);
   }
   
   const data = await response.json();
+  console.log(`[CAIC] Retrieved ${data.length} reports in ${elapsed}ms`);
   return data as FieldReport[];
 }
 
@@ -145,6 +158,9 @@ function mapInstabilityLevel(value: string | null | undefined): "None" | "Minor"
 
 // Aggregate data from reports
 function aggregateReports(reports: FieldReport[]): AggregatedData {
+  console.log(`[Aggregate] Starting aggregation of ${reports.length} reports`);
+  const startTime = Date.now();
+  
   const aggregated: AggregatedData = {
     totalReports: reports.length,
     reportsWithAvalanches: 0,
@@ -202,6 +218,12 @@ function aggregateReports(reports: FieldReport[]): AggregatedData {
     }
   }
 
+  const elapsed = Date.now() - startTime;
+  console.log(`[Aggregate] Completed in ${elapsed}ms`);
+  console.log(`[Aggregate] Results: ${aggregated.totalAvalanches} avalanches, ${aggregated.reportsWithAvalanches} reports with avalanches`);
+  console.log(`[Aggregate] By elevation: >TL=${aggregated.avalanchesByElevation.aboveTreeline}, TL=${aggregated.avalanchesByElevation.nearTreeline}, <TL=${aggregated.avalanchesByElevation.belowTreeline}`);
+  console.log(`[Aggregate] By aspect: N=${aggregated.avalanchesByAspect.N}, NE=${aggregated.avalanchesByAspect.NE}, E=${aggregated.avalanchesByAspect.E}, SE=${aggregated.avalanchesByAspect.SE}, S=${aggregated.avalanchesByAspect.S}, SW=${aggregated.avalanchesByAspect.SW}, W=${aggregated.avalanchesByAspect.W}, NW=${aggregated.avalanchesByAspect.NW}`);
+  
   return aggregated;
 }
 
@@ -211,6 +233,7 @@ function collectTexts(reports: FieldReport[]): {
   snowpack: string[];
   weather: string[];
 } {
+  console.log(`[CollectTexts] Extracting text from ${reports.length} reports`);
   const observations: string[] = [];
   const snowpack: string[] = [];
   const weather: string[] = [];
@@ -245,16 +268,21 @@ function collectTexts(reports: FieldReport[]): {
     }
   }
 
+  console.log(`[CollectTexts] Found ${observations.length} observation texts, ${snowpack.length} snowpack texts, ${weather.length} weather texts`);
   return { observations, snowpack, weather };
 }
 
 // Synthesize summary using xAI Grok with caching
 async function synthesizeSummary(texts: string[], category: string): Promise<{ summary: string; cached: boolean }> {
+  console.log(`[xAI] Synthesizing ${category} summary from ${texts.length} texts`);
+  
   if (texts.length === 0) {
+    console.log(`[xAI] No ${category} texts available, returning default message`);
     return { summary: `No ${category.toLowerCase()} data available for this date.`, cached: false };
   }
 
   const combinedText = texts.slice(0, 50).join("\n---\n"); // Limit to prevent token overflow
+  console.log(`[xAI] Combined text length: ${combinedText.length} chars (from ${Math.min(texts.length, 50)} texts)`);
   
   // Create cache key from payload
   const payload = {
@@ -267,10 +295,14 @@ async function synthesizeSummary(texts: string[], category: string): Promise<{ s
   // Check cache first
   const cached = getCachedResponse(cacheKey);
   if (cached) {
+    console.log(`[xAI] Using cached ${category} summary`);
     return { summary: cached, cached: true };
   }
   
   try {
+    console.log(`[xAI] Calling Grok-3 API for ${category} summary...`);
+    const startTime = Date.now();
+    
     const response = await openai.chat.completions.create({
       model: "grok-3",
       messages: [
@@ -286,14 +318,17 @@ async function synthesizeSummary(texts: string[], category: string): Promise<{ s
       max_tokens: 200,
     });
 
+    const elapsed = Date.now() - startTime;
     const summary = response.choices[0].message.content || `Unable to synthesize ${category.toLowerCase()} summary.`;
+    
+    console.log(`[xAI] ${category} summary generated in ${elapsed}ms (${summary.length} chars)`);
     
     // Cache the response
     setCachedResponse(cacheKey, summary);
     
     return { summary, cached: false };
   } catch (error) {
-    console.error(`Error synthesizing ${category}:`, error);
+    console.error(`[xAI] Error synthesizing ${category}:`, error);
     return { summary: `Error generating ${category.toLowerCase()} summary. Please try again.`, cached: false };
   }
 }
@@ -361,10 +396,16 @@ export async function registerRoutes(
   
   // Fetch and aggregate reports for a date with progress tracking
   app.post("/api/reports", async (req, res) => {
+    const requestStartTime = Date.now();
+    console.log(`\n${"=".repeat(60)}`);
+    console.log(`[Request] POST /api/reports at ${new Date().toISOString()}`);
+    console.log(`${"=".repeat(60)}`);
+    
     try {
       // Validate request body with Zod schema
       const parseResult = fetchReportsRequestSchema.safeParse(req.body);
       if (!parseResult.success) {
+        console.log(`[Request] Validation failed: ${parseResult.error.errors.map(e => e.message).join(", ")}`);
         return res.status(400).json({ 
           error: "Invalid request", 
           details: parseResult.error.errors.map(e => e.message).join(", ")
@@ -373,6 +414,8 @@ export async function registerRoutes(
       
       const { date } = parseResult.data;
       const sessionId = req.headers["x-session-id"] as string | undefined;
+      console.log(`[Request] Date: ${date}, SessionID: ${sessionId || "none"}`);
+      console.log(`[Request] Stage 1: Fetching CAIC reports...`);
 
       // Additional date format validation
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -386,14 +429,17 @@ export async function registerRoutes(
       if (sessionId) sendProgress(sessionId, "fetching", 25, `Retrieved ${reports.length} reports`);
       
       // Stage 2: Aggregate data
+      console.log(`[Request] Stage 2: Aggregating data...`);
       if (sessionId) sendProgress(sessionId, "aggregating", 30, "Aggregating report data...");
       const aggregatedData = aggregateReports(reports);
       if (sessionId) sendProgress(sessionId, "aggregating", 40, "Data aggregation complete");
       
       // Stage 3: Collect texts for synthesis
+      console.log(`[Request] Stage 3: Collecting texts for synthesis...`);
       const texts = collectTexts(reports);
       
       // Stage 4: Synthesize summaries
+      console.log(`[Request] Stage 4: Synthesizing AI summaries...`);
       if (sessionId) sendProgress(sessionId, "synthesizing", 45, "Generating observation summary...");
       const obsResult = await synthesizeSummary(texts.observations, "Observation");
       if (sessionId) sendProgress(sessionId, "synthesizing", 60, obsResult.cached ? "Observation summary loaded from cache" : "Observation summary generated");
@@ -419,19 +465,30 @@ export async function registerRoutes(
         },
       };
 
+      const totalElapsed = Date.now() - requestStartTime;
+      console.log(`[Request] Stage 5: Complete`);
+      console.log(`[Request] Total request time: ${totalElapsed}ms`);
+      console.log(`${"=".repeat(60)}\n`);
+
       res.json(response);
     } catch (error) {
-      console.error("Error fetching reports:", error);
+      const totalElapsed = Date.now() - requestStartTime;
+      console.error(`[Request] ERROR after ${totalElapsed}ms:`, error);
+      console.log(`${"=".repeat(60)}\n`);
       res.status(500).json({ error: "Failed to fetch and process reports" });
     }
   });
 
   // Chat endpoint
   app.post("/api/chat", async (req, res) => {
+    console.log(`[Chat] POST /api/chat at ${new Date().toISOString()}`);
+    const startTime = Date.now();
+    
     try {
       // Validate request body with Zod schema
       const parseResult = chatRequestSchema.safeParse(req.body);
       if (!parseResult.success) {
+        console.log(`[Chat] Validation failed: ${parseResult.error.errors.map(e => e.message).join(", ")}`);
         return res.status(400).json({ 
           error: "Invalid request", 
           details: parseResult.error.errors.map(e => e.message).join(", ")
@@ -439,12 +496,18 @@ export async function registerRoutes(
       }
       
       const { message, context, summaries } = parseResult.data;
+      console.log(`[Chat] User message: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
+      console.log(`[Chat] Context provided: ${context ? 'yes' : 'no'}, Summaries provided: ${summaries ? 'yes' : 'no'}`);
 
       const response = await chatWithContext(message, context, summaries);
       
+      const elapsed = Date.now() - startTime;
+      console.log(`[Chat] Response generated in ${elapsed}ms (${response.length} chars)`);
+      
       res.json({ response });
     } catch (error) {
-      console.error("Chat error:", error);
+      const elapsed = Date.now() - startTime;
+      console.error(`[Chat] ERROR after ${elapsed}ms:`, error);
       res.status(500).json({ error: "Failed to process chat message" });
     }
   });
