@@ -3,10 +3,6 @@ export interface IStorage {
   // Data is fetched fresh from CAIC API each request
 }
 
-export class MemStorage implements IStorage {
-  constructor() {
-    // No initialization needed
-  }
-}
+export class MemStorage implements IStorage {}
 
 export const storage = new MemStorage();

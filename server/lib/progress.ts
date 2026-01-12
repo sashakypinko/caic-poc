@@ -6,7 +6,7 @@ export type ProgressClient = {
 };
 
 export class ProgressTracker {
-  private clients = new Map<string, ProgressClient>();
+  private readonly clients = new Map<string, ProgressClient>();
 
   addClient(sessionId: string, res: Response): void {
     this.clients.set(sessionId, { res, sessionId });

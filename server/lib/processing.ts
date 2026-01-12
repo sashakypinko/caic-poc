@@ -178,17 +178,12 @@ export function aggregateReports(reports: FieldReport[]): AggregatedData {
 
 function pushIfPresent(arr: string[], text: string | null | undefined): void {
   const trimmed = text?.trim();
-  if (trimmed) {
-    arr.push(trimmed);
-  }
+  if (trimmed) arr.push(trimmed);
 }
 
-function extractComments(
-  arr: string[],
-  observations: Array<{ comments?: string | null }> | null | undefined,
-): void {
-  for (const obs of observations || []) {
-    pushIfPresent(arr, obs.comments);
+function extractComments(arr: string[], items: Array<{ comments?: string | null }> | null | undefined): void {
+  for (const item of items || []) {
+    pushIfPresent(arr, item.comments);
   }
 }
 

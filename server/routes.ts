@@ -12,6 +12,12 @@ import { createOpenAIClient, synthesizeSummary, chatWithContext } from "./lib/xa
 
 const openai = createOpenAIClient();
 
+function sendProgress(sessionId: string | undefined, stage: string, progress: number, message: string): void {
+  if (sessionId) {
+    progressTracker.sendProgress(sessionId, stage, progress, message);
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -60,32 +66,32 @@ export async function registerRoutes(
       }
 
       console.log(`[Request] Stage 1: Fetching CAIC reports...`);
-      if (sessionId) progressTracker.sendProgress(sessionId, "fetching", 10, "Fetching field reports from CAIC...");
+      sendProgress(sessionId, "fetching", 10, "Fetching field reports from CAIC...");
       const reports = await fetchCAICReports(date);
-      if (sessionId) progressTracker.sendProgress(sessionId, "fetching", 25, `Retrieved ${reports.length} reports`);
+      sendProgress(sessionId, "fetching", 25, `Retrieved ${reports.length} reports`);
       
       console.log(`[Request] Stage 2: Aggregating data...`);
-      if (sessionId) progressTracker.sendProgress(sessionId, "aggregating", 30, "Aggregating report data...");
+      sendProgress(sessionId, "aggregating", 30, "Aggregating report data...");
       const aggregatedData = aggregateReports(reports);
-      if (sessionId) progressTracker.sendProgress(sessionId, "aggregating", 40, "Data aggregation complete");
+      sendProgress(sessionId, "aggregating", 40, "Data aggregation complete");
       
       console.log(`[Request] Stage 3: Collecting texts for synthesis...`);
       const texts = collectTexts(reports);
       
       console.log(`[Request] Stage 4: Synthesizing AI summaries...`);
-      if (sessionId) progressTracker.sendProgress(sessionId, "synthesizing", 45, "Generating observation summary...");
+      sendProgress(sessionId, "synthesizing", 45, "Generating observation summary...");
       const obsResult = await synthesizeSummary(openai, texts.observations, "Observation");
-      if (sessionId) progressTracker.sendProgress(sessionId, "synthesizing", 60, obsResult.cached ? "Observation summary loaded from cache" : "Observation summary generated");
+      sendProgress(sessionId, "synthesizing", 60, obsResult.cached ? "Observation summary loaded from cache" : "Observation summary generated");
       
-      if (sessionId) progressTracker.sendProgress(sessionId, "synthesizing", 65, "Generating snowpack summary...");
+      sendProgress(sessionId, "synthesizing", 65, "Generating snowpack summary...");
       const snowResult = await synthesizeSummary(openai, texts.snowpack, "Snowpack");
-      if (sessionId) progressTracker.sendProgress(sessionId, "synthesizing", 80, snowResult.cached ? "Snowpack summary loaded from cache" : "Snowpack summary generated");
+      sendProgress(sessionId, "synthesizing", 80, snowResult.cached ? "Snowpack summary loaded from cache" : "Snowpack summary generated");
       
-      if (sessionId) progressTracker.sendProgress(sessionId, "synthesizing", 85, "Generating weather summary...");
+      sendProgress(sessionId, "synthesizing", 85, "Generating weather summary...");
       const weatherResult = await synthesizeSummary(openai, texts.weather, "Weather");
-      if (sessionId) progressTracker.sendProgress(sessionId, "synthesizing", 95, weatherResult.cached ? "Weather summary loaded from cache" : "Weather summary generated");
+      sendProgress(sessionId, "synthesizing", 95, weatherResult.cached ? "Weather summary loaded from cache" : "Weather summary generated");
       
-      if (sessionId) progressTracker.sendProgress(sessionId, "complete", 100, "Report aggregation complete");
+      sendProgress(sessionId, "complete", 100, "Report aggregation complete");
 
       const response: ReportResponse = {
         date,

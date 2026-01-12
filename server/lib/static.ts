@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 
 export function getDistPath(dirname: string): string {
   return path.resolve(dirname, "public");
