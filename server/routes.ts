@@ -276,14 +276,14 @@ async function synthesizeSummary(texts: string[], category: string): Promise<{ s
       messages: [
         {
           role: "system",
-          content: `You are an expert avalanche forecaster assistant. Synthesize the following ${category} observations into a concise summary identifying common themes, patterns, and notable findings. Be professional and factual. Keep the summary to 2-3 paragraphs.`
+          content: `You are an expert avalanche forecaster assistant. Synthesize the following ${category} observations into a brief, actionable summary. Focus on the most important patterns and safety-relevant findings. Be concise - limit to 3-4 sentences maximum.`
         },
         {
           role: "user",
-          content: `Please synthesize common themes from these ${category} observations:\n\n${combinedText}`
+          content: `Briefly summarize key themes from these ${category} observations (3-4 sentences max):\n\n${combinedText}`
         }
       ],
-      max_tokens: 500,
+      max_tokens: 200,
     });
 
     const summary = response.choices[0].message.content || `Unable to synthesize ${category.toLowerCase()} summary.`;

@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, User, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@shared/schema";
 import { format } from "date-fns";
@@ -16,24 +15,40 @@ interface ChatInterfaceProps {
 
 export function ChatInterface({ messages, onSendMessage, isLoading, disabled }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
     }
-  }, [messages]);
+  }, [input]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading || disabled) return;
     onSendMessage(input.trim());
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
   };
 
   return (
-    <div className="flex flex-col h-80">
-      <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
+    <div className="flex flex-col h-96">
+      <div className="flex-1 overflow-y-auto pr-2">
         <div className="space-y-4 py-2">
           {messages.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-8">
@@ -90,15 +105,19 @@ export function ChatInterface({ messages, onSendMessage, isLoading, disabled }: 
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
-      </ScrollArea>
-      <form onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t">
-        <Input
+      </div>
+      <form onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t items-end">
+        <Textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about today's data..."
+          onKeyDown={handleKeyDown}
+          placeholder="Ask about today's data... (Shift+Enter for new line)"
           disabled={disabled || isLoading}
-          className="flex-1"
+          className="flex-1 min-h-[40px] max-h-[120px] resize-none"
+          rows={1}
           data-testid="input-chat"
         />
         <Button 
