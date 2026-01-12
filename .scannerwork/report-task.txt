@@ -3,5 +3,5 @@ projectKey=tetheree-gitlab_caic-field-report-aggregator
 serverUrl=https://sonarcloud.io
 serverVersion=8.0.0.78371
 dashboardUrl=https://sonarcloud.io/dashboard?id=tetheree-gitlab_caic-field-report-aggregator
-ceTaskId=AZuyyrFmlt9MKUCnXGGb
-ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZuyyrFmlt9MKUCnXGGb
+ceTaskId=AZuy4Tmdj4Ttv7fX1ov0
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZuy4Tmdj4Ttv7fX1ov0

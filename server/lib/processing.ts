@@ -1,35 +1,56 @@
 import type { AggregatedData, FieldReport } from "@shared/schema";
 
-export function mapElevation(elevation: string | null | undefined): "aboveTreeline" | "nearTreeline" | "belowTreeline" | null {
+export function mapElevation(
+  elevation: string | null | undefined,
+): "aboveTreeline" | "nearTreeline" | "belowTreeline" | null {
   if (!elevation) return null;
-  
+
   let decoded = elevation
-    .replace(/&#62;/g, ">")
-    .replace(/&#60;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&lt;/g, "<")
+    .replaceAll("&#62;", ">")
+    .replaceAll("&#60;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&lt;", "<")
     .trim()
     .toUpperCase();
-  
-  if (decoded.includes(">TL") || decoded.startsWith(">") || decoded.includes("ATL") || decoded.includes("ABOVE") || decoded.includes("ALPINE")) {
+
+  if (
+    decoded.includes(">TL") ||
+    decoded.startsWith(">") ||
+    decoded.includes("ATL") ||
+    decoded.includes("ABOVE") ||
+    decoded.includes("ALPINE")
+  ) {
     return "aboveTreeline";
   }
-  
-  if (decoded.includes("<TL") || decoded.startsWith("<") || decoded.includes("BTL") || decoded.includes("BELOW") || decoded.includes("SUB")) {
+
+  if (
+    decoded.includes("<TL") ||
+    decoded.startsWith("<") ||
+    decoded.includes("BTL") ||
+    decoded.includes("BELOW") ||
+    decoded.includes("SUB")
+  ) {
     return "belowTreeline";
   }
-  
-  if (decoded === "TL" || decoded.includes("NTL") || decoded.includes("NEAR") || decoded.includes("TREELINE")) {
+
+  if (
+    decoded === "TL" ||
+    decoded.includes("NTL") ||
+    decoded.includes("NEAR") ||
+    decoded.includes("TREELINE")
+  ) {
     return "nearTreeline";
   }
-  
+
   return null;
 }
 
-export function mapAspect(aspect: string | null | undefined): keyof AggregatedData["avalanchesByAspect"] | null {
+export function mapAspect(
+  aspect: string | null | undefined,
+): keyof AggregatedData["avalanchesByAspect"] | null {
   if (!aspect) return null;
   const upper = aspect.toUpperCase().trim();
-  
+
   const twoLetterAspects = ["NE", "NW", "SE", "SW"] as const;
   for (const a of twoLetterAspects) {
     const regex = new RegExp(`\\b${a}\\b`);
@@ -37,7 +58,7 @@ export function mapAspect(aspect: string | null | undefined): keyof AggregatedDa
       return a;
     }
   }
-  
+
   const singleLetterAspects = ["N", "E", "S", "W"] as const;
   for (const a of singleLetterAspects) {
     const regex = new RegExp(`\\b${a}\\b`);
@@ -45,18 +66,35 @@ export function mapAspect(aspect: string | null | undefined): keyof AggregatedDa
       return a;
     }
   }
-  
+
   return null;
 }
 
-export function mapInstabilityLevel(value: string | null | undefined): "None" | "Minor" | "Moderate" | "Major" | "Severe" {
+export function mapInstabilityLevel(
+  value: string | null | undefined,
+): "None" | "Minor" | "Moderate" | "Major" | "Severe" {
   if (!value) return "None";
   const lower = value.toLowerCase();
   if (lower.includes("none") || lower === "no" || lower === "") return "None";
-  if (lower.includes("minor") || lower.includes("slight") || lower.includes("light")) return "Minor";
+  if (
+    lower.includes("minor") ||
+    lower.includes("slight") ||
+    lower.includes("light")
+  )
+    return "Minor";
   if (lower.includes("moderate") || lower.includes("medium")) return "Moderate";
-  if (lower.includes("major") || lower.includes("heavy") || lower.includes("significant")) return "Major";
-  if (lower.includes("severe") || lower.includes("extreme") || lower.includes("widespread")) return "Severe";
+  if (
+    lower.includes("major") ||
+    lower.includes("heavy") ||
+    lower.includes("significant")
+  )
+    return "Major";
+  if (
+    lower.includes("severe") ||
+    lower.includes("extreme") ||
+    lower.includes("widespread")
+  )
+    return "Severe";
   return "None";
 }
 
@@ -71,18 +109,36 @@ export function aggregateReports(reports: FieldReport[]): AggregatedData {
       belowTreeline: 0,
     },
     avalanchesByAspect: {
-      N: 0, NE: 0, E: 0, SE: 0, S: 0, SW: 0, W: 0, NW: 0,
+      N: 0,
+      NE: 0,
+      E: 0,
+      SE: 0,
+      S: 0,
+      SW: 0,
+      W: 0,
+      NW: 0,
     },
     crackingCounts: {
-      None: 0, Minor: 0, Moderate: 0, Major: 0, Severe: 0,
+      None: 0,
+      Minor: 0,
+      Moderate: 0,
+      Major: 0,
+      Severe: 0,
     },
     collapsingCounts: {
-      None: 0, Minor: 0, Moderate: 0, Major: 0, Severe: 0,
+      None: 0,
+      Minor: 0,
+      Moderate: 0,
+      Major: 0,
+      Severe: 0,
     },
   };
 
   for (const report of reports) {
-    const avalancheCount = report.avalanche_observations?.length || report.avalanche_observations_count || 0;
+    const avalancheCount =
+      report.avalanche_observations?.length ||
+      report.avalanche_observations_count ||
+      0;
     if (avalancheCount > 0) {
       aggregated.reportsWithAvalanches++;
     }
@@ -93,7 +149,7 @@ export function aggregateReports(reports: FieldReport[]): AggregatedData {
       if (elevation) {
         aggregated.avalanchesByElevation[elevation]++;
       }
-      
+
       const aspect = mapAspect(avy.aspect);
       if (aspect) {
         aggregated.avalanchesByAspect[aspect]++;
@@ -103,18 +159,37 @@ export function aggregateReports(reports: FieldReport[]): AggregatedData {
     for (const obs of report.snowpack_observations || []) {
       const crackingLevel = mapInstabilityLevel(obs.cracking);
       aggregated.crackingCounts[crackingLevel]++;
-      
+
       const collapsingLevel = mapInstabilityLevel(obs.collapsing);
       aggregated.collapsingCounts[collapsingLevel]++;
     }
 
-    if (!report.snowpack_observations || report.snowpack_observations.length === 0) {
+    if (
+      !report.snowpack_observations ||
+      report.snowpack_observations.length === 0
+    ) {
       aggregated.crackingCounts.None++;
       aggregated.collapsingCounts.None++;
     }
   }
 
   return aggregated;
+}
+
+function pushIfPresent(arr: string[], text: string | null | undefined): void {
+  const trimmed = text?.trim();
+  if (trimmed) {
+    arr.push(trimmed);
+  }
+}
+
+function extractComments(
+  arr: string[],
+  observations: Array<{ comments?: string | null }> | null | undefined,
+): void {
+  for (const obs of observations || []) {
+    pushIfPresent(arr, obs.comments);
+  }
 }
 
 export function collectTexts(reports: FieldReport[]): {
@@ -127,30 +202,11 @@ export function collectTexts(reports: FieldReport[]): {
   const weather: string[] = [];
 
   for (const report of reports) {
-    const obsText = report.observation_summary || report.description;
-    if (obsText && obsText.trim()) {
-      observations.push(obsText.trim());
-    }
-
-    const snowpackText = report.snowpack_detail?.description;
-    if (snowpackText && snowpackText.trim()) {
-      snowpack.push(snowpackText.trim());
-    }
-    for (const obs of report.snowpack_observations || []) {
-      if (obs.comments && obs.comments.trim()) {
-        snowpack.push(obs.comments.trim());
-      }
-    }
-
-    const weatherText = report.weather_detail?.description;
-    if (weatherText && weatherText.trim()) {
-      weather.push(weatherText.trim());
-    }
-    for (const obs of report.weather_observations || []) {
-      if (obs.comments && obs.comments.trim()) {
-        weather.push(obs.comments.trim());
-      }
-    }
+    pushIfPresent(observations, report.observation_summary || report.description);
+    pushIfPresent(snowpack, report.snowpack_detail?.description);
+    extractComments(snowpack, report.snowpack_observations);
+    pushIfPresent(weather, report.weather_detail?.description);
+    extractComments(weather, report.weather_observations);
   }
 
   return { observations, snowpack, weather };

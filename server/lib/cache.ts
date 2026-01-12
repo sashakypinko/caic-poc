@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -8,8 +8,8 @@ export interface CacheEntry {
 }
 
 export class ResponseCache {
-  private cache = new Map<string, CacheEntry>();
-  private ttlMs: number;
+  private readonly cache = new Map<string, CacheEntry>();
+  private readonly ttlMs: number;
 
   constructor(ttlMs: number = CACHE_TTL_MS) {
     this.ttlMs = ttlMs;
